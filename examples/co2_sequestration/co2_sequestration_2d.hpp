@@ -23,30 +23,42 @@ private:
     galois::StatTimer integration_timer{"integration"};
     ads::mumps::solver solver;
     // parameters
-    const double mu_w = 1.25;
-    const double mu_g = 2;
-    const double K = 1;
-    const double phi = 1;
-    const double rho_w = 2;
-    const double rho_g = 1;
-    const double g = 1;
+    const double mu_w; //= 1.25;
+    const double mu_g; //= 2;
+    const double K; //= 1;
+    const double phi; //= 1;
+    const double rho_w; //= 2;
+    const double rho_g; //= 1;
+    const double g; //= 1;
     // constants for now - will be functions later
     const double q_w = 0;
     const double q_g = 0;
 
+    bool verbose;
+
 public:
-    explicit co2_sequestration_2d(const config_2d& config)
+    explicit co2_sequestration_2d(const config_2d& config, 
+    const double mu_w, const double mu_g, const double K, const double phi, 
+    const double rho_w, const double rho_g, const double g, bool verbose)
     : Base{config}
     , p{shape()}
     , s{shape()}
     , p_prev{shape()}
     , s_prev{shape()}
-    , output{x.B, y.B, 200} { }
+    , mu_w{mu_w}
+    , mu_g{mu_g}
+    , K{K}
+    , phi{phi}
+    , rho_w{rho_w}
+    , rho_g{rho_g}
+    , g{g}
+    , verbose{verbose}
+    , output{x.B, y.B, 2 * config.x.elements, 2 * config.y.elements} { }
 
     double init_state(double x, double y) {
-        double dx = x - 0.5;
-        double dy = y - 0.5;
-        double r2 = std::min(8 * (dx * dx + dy * dy), 1.0);
+        double dx = x - 50;
+        double dy = y - 8;
+        double r2 = std::min(0.25 * (dx * dx + dy * dy), 1.0);
         return 0.5 * ((r2 - 1) * (r2 - 1) * (r2 + 1) * (r2 + 1));
         // return 0;
     };
@@ -79,9 +91,10 @@ private:
         projection(s, init);
         solve(s);
 
-
         output.to_file(p, "p.init.data");
         output.to_file(s, "s.init.data");
+        if (verbose) {
+            std::cout << "Initial projection computed" << std::endl;}
     }
 
     void before_step(int /*iter*/, double /*t*/) override {
@@ -113,6 +126,8 @@ private:
         if (iter % 100 == 0) {
             output.to_file(p, "p.out_%d.data", iter);
             output.to_file(s, "s.out_%d.data", iter);
+            if (verbose) {
+                std::cout << "Iteration " << iter << " passed" << std::endl;}
         }
     }
 
@@ -128,7 +143,6 @@ private:
             double J = jacobian(e);
             for (auto q : quad_points()) {
                 double w = weight(q);
-                // question - what are the a, and aa variables and what do they do?
                 for (auto a : dofs_on_element(e)) {
                     auto aa = dof_global_to_local(e, a);
                     value_type v = eval_basis(e, q, a);
