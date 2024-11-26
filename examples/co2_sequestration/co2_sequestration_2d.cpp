@@ -87,8 +87,8 @@ int main(int argc, char* argv[]) {
     n_elem_x = static_cast<int>(mesh_x);
     n_elem_y = static_cast<int>(mesh_y);
 
-    ads::dim_config dim_x{2, n_elem_x, 0, mesh_x}; // {P, N} 2 - number of B-splines (P); higher P - more precision; 2-3 is okay
-    ads::dim_config dim_y{2, n_elem_y, 0, mesh_y}; 
+    ads::dim_config dim_x{2, 2 * n_elem_x, 0, mesh_x}; // {P, N} 2 - number of B-splines (P); higher P - more precision; 2-3 is okay
+    ads::dim_config dim_y{2, 2 * n_elem_y, 0, mesh_y}; 
     ads::timesteps_config steps{num_steps, timestep_size};
     int ders = 1; // order of derivative 
 
