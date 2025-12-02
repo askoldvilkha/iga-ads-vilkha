@@ -10,7 +10,6 @@
 #include "ads/executor/galois.hpp"
 #include "ads/output_manager.hpp"
 #include "ads/simulation.hpp"
-#include "ads/solver/mumps.hpp"
 
 
 #include "ads/lin/tensor/tensor.hpp"
@@ -24,8 +23,11 @@ private:
 
     output_manager<2> output;
     galois_executor executor{4};
-    galois::StatTimer integration_timer{"integration"};
-    ads::mumps::solver solver;
+    galois::StatTimer initialization_timer{"initialization"};
+    galois::StatTimer data_input_timer{"data_input"};
+    galois::StatTimer integration_timer_s{"integration_s"};
+    galois::StatTimer solver_timer_s{"solver_s"};
+    galois::StatTimer data_output_timer{"data_output"};
 
     // parameter maps
     using map_array = ads::lin::tensor<double, 2>;
@@ -49,6 +51,7 @@ private:
     const int mesh_y;
     std::string porosity_map;
     std::string permeability_map;
+    const double darcy_to_si = 9.869233e-13; // conversion factor from Darcy to m^2
     bool verbose;
 
 public:
@@ -79,7 +82,7 @@ public:
     , permeability_map{permeability_map}
     , mesh_x{config.x.b}
     , mesh_y{config.y.b}
-    , output{x.B, y.B, 2 * config.x.elements, 2 * config.y.elements}
+    , output{x.B, y.B, config.x.elements, config.y.elements}
     , porosity{{1, 1}}
     , permeability{{1, 1}} { }
 
@@ -277,6 +280,7 @@ private:
     }
 
     void before() override {
+        initialization_timer.start();
         prepare_matrices();
 
         if (porosity_map != "none") {
@@ -289,13 +293,15 @@ private:
             }
         }
 
-        // if (permeability_map != "none") {
-            // permeability = read_map_data("permeability_k1.data");
-        // }
-
+        if (permeability_map != "none") {
+            permeability = read_map_data(permeability_map);
+            visualize_map_data(permeability, "permeability_visualization.dat");
+        }
+        initialization_timer.stop();
     }
 
     void before_step(int /*iter*/, double /*t*/) override {
+        data_input_timer.start();
         // load the S and P data from files
         // load the coefficients!!! from the previous step
         if (iter > 0) {
@@ -309,17 +315,23 @@ private:
             solve(s_prev);
             p_prev.fill_with_zeros();
         }
+        data_input_timer.stop();
     }
 
     void step(int /*iter*/, double /*t*/) override {
         // solve for S after loading data for P
+        integration_timer_s.start();
         compute_rhs(iter * steps.dt);
         dirichlet_bc(s, boundary::left, x, y, [](double t) { return 0; });
         dirichlet_bc(s, boundary::right, x, y, [](double t) { return 0; });
+        integration_timer_s.stop();
+        solver_timer_s.start();
         solve(s);
+        solver_timer_s.stop();
     }
 
     void after_step(int /*iter*/, double /*t*/) override {
+        data_output_timer.start();
         // output the S data to files
         output_s_to_iga(s, iter);
         output_s_to_pinn(s, resolution, iter);
@@ -332,6 +344,32 @@ private:
         if (verbose) {
             std::cout << "Iteration " << iter << " passed" << std::endl;
         }
+        data_output_timer.stop();
+    }
+
+    void after() override {
+        std::cout << "\n=== Timer Results ===" << std::endl;
+        std::cout << "Initialization: " << initialization_timer.get() << " ms" << std::endl;
+        std::cout << "Data Input: " << data_input_timer.get() << " ms" << std::endl;
+        std::cout << "Integration S: " << integration_timer_s.get() << " ms" << std::endl;
+        std::cout << "Solver S: " << solver_timer_s.get() << " ms" << std::endl;
+        std::cout << "Data Output: " << data_output_timer.get() << " ms" << std::endl;
+        std::cout << "=====================\n" << std::endl;
+        std::cout << "Final L2 norms: " << std::endl;
+        std::cout << "||p||_L2 = " << normL2(p, x, y) << std::endl;
+        std::cout << "||s||_L2 = " << normL2(s, x, y) << std::endl;
+    }
+
+    double approximate_K_at_point(point_type xy) {
+        double K_here;
+        if (permeability_map != "none") {
+            K_here = approximate_map_data(xy, permeability);
+            K_here = K_here * darcy_to_si * 1e-3; // convert from mD to m^2
+        }
+        else {
+            K_here = K;
+        }
+        return K_here;
     }
 
     void compute_rhs(double t) {
@@ -352,9 +390,10 @@ private:
                     value_type s = eval_fun(s_prev, e, q);
                     value_type p_here = eval_fun(p, e, q);
 
+                    double K_here = approximate_K_at_point(x);
                     double s_val = std::clamp(s.val, 0.0, 1.0);
-                    double term_1 = s_val * grad_dot(p_here, v) * K / mu_g;
-                    double term_2 = s_val * v.dy * K * rho_g * g / mu_g;
+                    double term_1 = s_val * grad_dot(p_here, v) * K_here / mu_g;
+                    double term_2 = s_val * v.dy * K_here * rho_g * g / mu_g;
                     double term_3 = v.val * source_g(x[0], x[1], t);
 
                     double phi_here;
@@ -366,7 +405,7 @@ private:
 
                     // temporary porosity increase
                     phi_here += 0.1;
-                    double val = (term_2 + term_3 - term_1) * steps.dt / phi_here + s_val * v.val;
+                    double val = (term_2 - term_1 + term_3) * steps.dt / phi_here + s_val * v.val;
 
                     // NOTE! this term is a temporary enforcement of the upper ceiling on saturation
                     double term_extra = -1 * s.val * v.val * (x[1] >= mesh_y - 1);
