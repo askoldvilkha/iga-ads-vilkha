@@ -16,11 +16,11 @@ n_iter = args.n_iter
 t_step = args.t_step
 fps = args.fps
 
-plt.rcParams['font.size'] = 16
-plt.rcParams['axes.labelsize'] = 18
-plt.rcParams['xtick.labelsize'] = 16
-plt.rcParams['ytick.labelsize'] = 16
-plt.rcParams['figure.titlesize'] = 20
+plt.rcParams['font.size'] = 24
+plt.rcParams['axes.labelsize'] = 20
+plt.rcParams['xtick.labelsize'] = 18
+plt.rcParams['ytick.labelsize'] = 18
+plt.rcParams['figure.titlesize'] = 24
 
 # load data
 data_dict = {}
@@ -29,6 +29,11 @@ data_dict['s'] = {}
 for i in tqdm(range(n_iter)):
     data_dict['p'][i] = np.loadtxt('p.out_' + str(i * 10) + '.data')
     data_dict['s'][i] = np.loadtxt('s.out_' + str(i * 10) + '.data')
+
+data0 = data_dict['p'][0]
+x_unique = np.unique(data0[:, 0])
+y_unique = np.unique(data0[:, 1])
+extent = [x_unique.min(), x_unique.max(), y_unique.max(), y_unique.min()]
 
 def heatmap_data(data_dict, label, i):
     data = data_dict[label][i]
@@ -50,8 +55,8 @@ def heatmap_data(data_dict, label, i):
 
 fig, ax = plt.subplots(1, 2, figsize=(36, 12))
 
-p_heatmap = ax[0].imshow(heatmap_data(data_dict, 'p', 0), cmap='viridis', aspect='equal', animated=True)
-s_heatmap = ax[1].imshow(heatmap_data(data_dict, 's', 0), cmap='viridis', aspect='equal', animated=True)
+p_heatmap = ax[0].imshow(heatmap_data(data_dict, 'p', 0), extent=extent, cmap='viridis', aspect='equal', animated=True)
+s_heatmap = ax[1].imshow(heatmap_data(data_dict, 's', 0), extent=extent, cmap='viridis', aspect='equal', animated=True)
 p_colorbar = fig.colorbar(p_heatmap, ax=ax[0])
 s_colorbar = fig.colorbar(s_heatmap, ax=ax[1])
 
