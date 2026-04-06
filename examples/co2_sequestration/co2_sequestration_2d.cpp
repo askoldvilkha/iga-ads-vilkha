@@ -30,6 +30,7 @@ int main(int argc, char* argv[]) {
     double qg_radius = 2.0;
     std::string porosity_map = "none";
     std::string permeability_map = "none";
+    int threads = 4;
 
     auto cli =
         lyra::help(show_help)                                                                  //
@@ -53,7 +54,8 @@ int main(int argc, char* argv[]) {
         | lyra::opt(porosity_map, "porosity_map")["--porosity_map"]("porosity map file path")     //
         | lyra::opt(permeability_map, "permeability_map")["--permeability_map"](
             "permeability map file path")  //
-        | lyra::opt(verbose)["--verbose"];
+        | lyra::opt(verbose)["--verbose"]  //
+        | lyra::opt(threads, "threads")["--threads"]("number of threads to use");
 
     auto const result = cli.parse({argc, argv});
 
@@ -97,6 +99,7 @@ int main(int argc, char* argv[]) {
         std::cout << "qg_radius: " << sqrt(qg_radius) << std::endl;
         std::cout << "porosity_map: " << porosity_map << std::endl;
         std::cout << "permeability_map: " << permeability_map << std::endl;
+        std::cout << "threads: " << threads << std::endl;
     }
 
     int n_elem_x = static_cast<int>(mesh_x);
@@ -110,6 +113,6 @@ int main(int argc, char* argv[]) {
     ads::config_2d c{dim_x, dim_y, steps, ders};
     auto sim = ads::problems::co2_sequestration_2d(c, mu_w, mu_g, K, phi, rho_w, rho_g, g, qg_x,
                                                    qg_y, qg_rate, qg_radius, porosity_map, permeability_map,
-                                                   verbose);
+                                                   verbose, threads);
     sim.run();
 }

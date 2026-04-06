@@ -21,7 +21,7 @@ private:
     vector_type p, s, p_prev, s_prev;
 
     output_manager<2> output;
-    galois_executor executor{4};
+    galois_executor executor;
     galois::StatTimer initialization_timer{"initialization"};
     galois::StatTimer integration_timer_s{"integration_s"};
     galois::StatTimer integration_timer_p{"integration_p"};
@@ -85,7 +85,8 @@ public:
     , mesh_y{config.y.b}
     , output{x.B, y.B, config.x.elements, config.y.elements}
     , porosity{{1, 1}}
-    , permeability{{1, 1}} { }
+    , permeability{{1, 1}}
+    , executor{threads} { }
 
     // this function sets the initial state of the gas saturation
     double init_state(double x, double y) {
