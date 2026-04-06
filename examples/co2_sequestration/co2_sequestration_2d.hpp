@@ -48,6 +48,7 @@ private:
     const double qg_x;     // gas injection location - x
     const double qg_y;     // gas injection location - y
     const double qg_rate;  // gas injection rate
+    const double qg_radius; // gas injection radius (squared)
     const int mesh_x;
     const int mesh_y;
     std::string porosity_map;
@@ -59,8 +60,8 @@ public:
     explicit co2_sequestration_2d(const config_2d& config, const double mu_w, const double mu_g,
                                   const double K, const double phi,
                                   const double rho_w, const double rho_g, const double g,
-                                  const double qg_x, const double qg_y, const double qg_rate,
-                                  std::string porosity_map, std::string permeability_map, bool verbose)
+                                  const double qg_x, const double qg_y, const double qg_rate, const double qg_radius,
+                                  std::string porosity_map, std::string permeability_map, bool verbose, int threads)
     : Base{config}
     , p{shape()}
     , s{shape()}
@@ -76,6 +77,7 @@ public:
     , qg_x{qg_x}
     , qg_y{qg_y}
     , qg_rate{qg_rate}
+    , qg_radius{qg_radius}
     , verbose{verbose}
     , porosity_map{porosity_map}
     , permeability_map{permeability_map}
@@ -98,7 +100,7 @@ public:
     double source_g(double x, double y, double t) {
         double dx = x - qg_x;
         double dy = y - qg_y;
-        double r2 = std::min(0.5 * (dx * dx + dy * dy), 1.0);
+        double r2 = std::min(1.0 / qg_radius * (dx * dx + dy * dy), 1.0);
         return qg_rate * ((r2 - 1) * (r2 - 1) * (r2 + 1) * (r2 + 1));
     }
 
@@ -206,8 +208,8 @@ private:
     void prepare_matrices() {
         x.fix_left();
         x.fix_right();
-        // y.fix_left();
-        // y.fix_right();
+        y.fix_left();
+        y.fix_right();
 
         // !!all the bcs are Dirichlet for now - this is not correct for the final version!!
         Base::prepare_matrices();
@@ -255,6 +257,8 @@ private:
 
         dirichlet_bc(p, boundary::left, x, y, [](double t) { return 0; });
         dirichlet_bc(p, boundary::right, x, y, [](double t) { return 0; });
+        dirichlet_bc(p, boundary::bottom, x, y, [](double t) { return 0; });
+        dirichlet_bc(p, boundary::top, x, y, [](double t) { return 0; });
 
         ads::mumps::problem problem_p(p.data(), p.size());
         assemble_problem(problem_p);
@@ -270,6 +274,8 @@ private:
         compute_rhs(t);
         dirichlet_bc(s, boundary::left, x, y, [](double t) { return 0; });
         dirichlet_bc(s, boundary::right, x, y, [](double t) { return 0; });
+        dirichlet_bc(s, boundary::bottom, x, y, [](double t) { return 0; });
+        dirichlet_bc(s, boundary::top, x, y, [](double t) { return 0; });
         integration_timer_s.stop();
 
         solver_timer_s.start();
@@ -278,7 +284,7 @@ private:
     }
 
     void after_step(int iter, double /*t*/) override {
-        if (iter % 1 == 0) {
+        if (iter % 10 == 0) {
             output_timer.start();
             output.to_file(p, "p.out_%d.data", iter);
             output.to_file(s, "s.out_%d.data", iter);
@@ -413,11 +419,15 @@ private:
                     value_type s = eval_fun(s_prev, e, q);
 
                     double K_here = approximate_K_at_point(x);
-                    double term_1 = K_here * s.val * v.dy * g * rho_w / mu_w;
+                    //double term_1 = K_here * s.val * v.dy * g * rho_w / mu_w;
+                    // considering no differentiation in weak form
+                    double term_1 = K_here * (1 - s.val) * v.dy * g * rho_w / mu_w;
                     double term_2 = K_here * s.val * v.dy * g * rho_g / mu_g;
                     double term_3 = (source_w(x[0], x[1], t) + source_g(x[0], x[1], t)) * v.val;
 
-                    double val = term_1 - term_2 - term_3;
+                    // double val = term_1 - term_2 - term_3;
+                    // considering negative sign in front of divergence in weak form
+                    double val = term_1 + term_2 + term_3;
                     U(aa[0], aa[1]) += val * w * J;
                 }
             }
@@ -450,7 +460,9 @@ private:
 
                         double K_here = approximate_K_at_point(point(e, q, x, y));
 
-                        double bwu = -1 * K_here * (diff_1 + diff_2) * grad_dot(uu, ww);
+                        // double bwu = -1 * K_here * (diff_1 + diff_2) * grad_dot(uu, ww);
+                        // considering overall sign change in weak form
+                        double bwu = 1 * K_here * (diff_1 + diff_2) * grad_dot(uu, ww);
 
                         // double bwu = grad_dot(uu, ww);
                         val += bwu * w * J;
@@ -484,7 +496,7 @@ private:
 
     bool is_fixed(index_type dof, const dimension& /*x*/, const dimension& /*y*/) const {
         // return false; //dof[0] == 0 && dof[1] == 0; //|| dof[1] == y.dofs() - 1;
-        return dof[0] == 0 || dof[0] == x.dofs() - 1;
+        return dof[0] == 0 || dof[0] == x.dofs() - 1 || dof[1] == 0 || dof[1] == y.dofs() - 1;
     }
 
     // bool is_fixed(index_type dof, const dimension& /*x*/, const dimension& /*y*/) const {

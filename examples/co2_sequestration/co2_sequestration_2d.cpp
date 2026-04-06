@@ -4,6 +4,7 @@
 #include "co2_sequestration_2d.hpp"
 
 #include <iostream>
+#include <cmath>
 
 #include <lyra/lyra.hpp>
 
@@ -26,6 +27,7 @@ int main(int argc, char* argv[]) {
     double qg_x = -1;
     double qg_y = -1;
     double qg_rate = 1e-6;
+    double qg_radius = 2.0;
     std::string porosity_map = "none";
     std::string permeability_map = "none";
 
@@ -47,6 +49,7 @@ int main(int argc, char* argv[]) {
         | lyra::opt(qg_y, "qg_y")["--qg_y"](
             "qg_y (parameter) - gas injection location in y direction")                           //
         | lyra::opt(qg_rate, "qg_rate")["--qg_rate"]("qg_rate (parameter) - gas injection rate")  //
+        | lyra::opt(qg_radius, "qg_radius")["--qg_radius"]("qg_radius (parameter) - gas injection radius (squared)")  //
         | lyra::opt(porosity_map, "porosity_map")["--porosity_map"]("porosity map file path")     //
         | lyra::opt(permeability_map, "permeability_map")["--permeability_map"](
             "permeability map file path")  //
@@ -91,6 +94,7 @@ int main(int argc, char* argv[]) {
         std::cout << "qg_x: " << qg_x << std::endl;
         std::cout << "qg_y: " << qg_y << std::endl;
         std::cout << "qg_rate: " << qg_rate << std::endl;
+        std::cout << "qg_radius: " << sqrt(qg_radius) << std::endl;
         std::cout << "porosity_map: " << porosity_map << std::endl;
         std::cout << "permeability_map: " << permeability_map << std::endl;
     }
@@ -105,7 +109,7 @@ int main(int argc, char* argv[]) {
 
     ads::config_2d c{dim_x, dim_y, steps, ders};
     auto sim = ads::problems::co2_sequestration_2d(c, mu_w, mu_g, K, phi, rho_w, rho_g, g, qg_x,
-                                                   qg_y, qg_rate, porosity_map, permeability_map,
+                                                   qg_y, qg_rate, qg_radius, porosity_map, permeability_map,
                                                    verbose);
     sim.run();
 }
