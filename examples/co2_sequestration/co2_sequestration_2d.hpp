@@ -241,6 +241,8 @@ private:
             std::cout << "Initial projection computed" << std::endl;
         }
         initialization_timer.stop();
+
+        std::cout << "Galois active threads: " << galois::getActiveThreads() << std::endl;
     }
 
     void before_step(int /*iter*/, double /*t*/) override {
@@ -299,6 +301,7 @@ private:
 
     void after() override {
         std::cout << "\n=== Timer Results ===" << std::endl;
+        std::cout << "Galois active threads: " << galois::getActiveThreads() << std::endl;
         std::cout << "Initialization: " << initialization_timer.get() << " ms" << std::endl;
         std::cout << "Integration (s): " << integration_timer_s.get() << " ms" << std::endl;
         std::cout << "Integration (p): " << integration_timer_p.get() << " ms" << std::endl;
