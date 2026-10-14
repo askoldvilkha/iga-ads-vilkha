@@ -260,8 +260,8 @@ private:
 
         dirichlet_bc(p, boundary::left, x, y, [](double t) { return 0; });
         dirichlet_bc(p, boundary::right, x, y, [](double t) { return 0; });
-        dirichlet_bc(p, boundary::bottom, x, y, [](double t) { return 0; });
-        dirichlet_bc(p, boundary::top, x, y, [](double t) { return 0; });
+        // dirichlet_bc(p, boundary::bottom, x, y, [](double t) { return 0; });
+        // dirichlet_bc(p, boundary::top, x, y, [](double t) { return 0; });
 
         ads::mumps::problem problem_p(p.data(), p.size());
         assemble_problem(problem_p);
@@ -390,7 +390,7 @@ private:
                     }
 
                     // temporary porosity increase
-                    phi_here += 0.1;
+                    phi_here += 0.01;
                     double val = (term_2 - term_1 + term_3) * steps.dt / phi_here + s_val * v.val;
 
                     // NOTE! this term is a temporary enforcement of the upper ceiling on saturation
@@ -459,14 +459,14 @@ private:
                         value_type uu = eval_basis(e, q, b, x, y);
 
                         double s = std::clamp(eval_fun(s_prev, e, q).val, 0.0, 1.0);
-                        double diff_1 = (1 - s) / mu_w;
-                        double diff_2 = s / mu_g;
+                        double lambda_1 = (1 - s) / mu_w;
+                        double lambda_2 = s / mu_g;
 
                         double K_here = approximate_K_at_point(point(e, q, x, y));
 
-                        // double bwu = -1 * K_here * (diff_1 + diff_2) * grad_dot(uu, ww);
+                        // double bwu = -1 * K_here * (lambda_1 + lambda_2) * grad_dot(uu, ww);
                         // considering overall sign change in weak form
-                        double bwu = 1 * K_here * (diff_1 + diff_2) * grad_dot(uu, ww);
+                        double bwu = 1 * K_here * (lambda_1 + lambda_2) * grad_dot(uu, ww);
 
                         // double bwu = grad_dot(uu, ww);
                         val += bwu * w * J;
@@ -482,13 +482,10 @@ private:
             }
 
             // 1's for Dirichlet BC
-            for_boundary_dofs(x, y, [&](index_type dof) {
-                if (is_fixed(dof, x, y)) {
-                    int i = linear_index(dof, x, y) + 1;
-                    vals_buf.push_back({i, i, 1});
-                    // executor.synchronized([&]() { problem.add(i, i, 1); });
-                }
-            });
+            if (is_fixed(a, x, y) && is_boundary(a, x, y)) {
+                int i = linear_index(a, x, y) + 1;
+                vals_buf.push_back({i, i, 1});
+            }
 
             executor.synchronized([&]() {
                 for (auto& [i, j, val] : vals_buf) {
@@ -500,6 +497,10 @@ private:
 
     bool is_fixed(index_type dof, const dimension& /*x*/, const dimension& /*y*/) const {
         // return false; //dof[0] == 0 && dof[1] == 0; //|| dof[1] == y.dofs() - 1;
+        return dof[0] == 0 || dof[0] == x.dofs() - 1;// || dof[1] == 0 || dof[1] == y.dofs() - 1;
+    }
+
+    bool is_boundary(index_type dof, const dimension& /*x*/, const dimension& /*y*/) const {
         return dof[0] == 0 || dof[0] == x.dofs() - 1 || dof[1] == 0 || dof[1] == y.dofs() - 1;
     }
 
